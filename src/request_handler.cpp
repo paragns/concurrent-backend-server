@@ -53,7 +53,10 @@ std::string RequestHandler::handle_set(const std::vector<std::string>& tokens) {
   std::string key = tokens[1];
   std::string value = tokens[2];
 
-  store_[key] = value;
+  {
+    std::unique_lock<std::mutex> lock(store_mutex_);
+    store_[key] = value;
+  }
 
   std::cout << "[SET] " << key << " = " << value << std::endl;
 
@@ -67,15 +70,20 @@ std::string RequestHandler::handle_get(const std::vector<std::string>& tokens) {
   }
 
   std::string key = tokens[1];
+  std::string result;
 
-  auto it = store_.find(key);
-  if (it != store_.end()) {
-    std::cout << "[GET] " << key << " -> " << it->second << std::endl;
-    return it->second + "\n";
-  } else {
-    std::cout << "[GET] " << key << " -> NOT FOUND" << std::endl;
-    return "NOT_FOUND\n";
+  {
+    std::unique_lock<std::mutex> lock(store_mutex_);
+    auto it = store_.find(key);
+    if (it != store_.end()) {
+      result = it->second;
+      std::cout << "[GET] " << key << " -> " << result << std::endl;
+      return result + "\n";
+    }
   }
+
+  std::cout << "[GET] " << key << " -> NOT FOUND" << std::endl;
+  return "NOT_FOUND\n";
 }
 
 std::string RequestHandler::handle_delete(
@@ -87,15 +95,18 @@ std::string RequestHandler::handle_delete(
 
   std::string key = tokens[1];
 
-  auto it = store_.find(key);
-  if (it != store_.end()) {
-    store_.erase(it);
-    std::cout << "[DELETE] " << key << std::endl;
-    return "OK\n";
-  } else {
-    std::cout << "[DELETE] " << key << " -> NOT FOUND" << std::endl;
-    return "NOT_FOUND\n";
+  {
+    std::unique_lock<std::mutex> lock(store_mutex_);
+    auto it = store_.find(key);
+    if (it != store_.end()) {
+      store_.erase(it);
+      std::cout << "[DELETE] " << key << std::endl;
+      return "OK\n";
+    }
   }
+
+  std::cout << "[DELETE] " << key << " -> NOT FOUND" << std::endl;
+  return "NOT_FOUND\n";
 }
 
 std::string RequestHandler::handle_ping(const std::vector<std::string>& tokens) {

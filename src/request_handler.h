@@ -3,6 +3,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <mutex>
 
 class RequestHandler {
  public:
@@ -14,6 +15,7 @@ class RequestHandler {
  private:
   // The key-value store
   std::unordered_map<std::string, std::string> store_;
+  mutable std::mutex store_mutex_;  // Protects store_ from concurrent access
 
   // Helper methods
   std::vector<std::string> tokenize(const std::string& input);
