@@ -23,7 +23,7 @@ int main() {
   // Register signal handler for Ctrl+C
   signal(SIGINT, signal_handler);
 
-  std::cout << "Starting Concurrent Backend Server (Chapter 1)..." << std::endl;
+  std::cout << "Starting Concurrent Backend Server..." << std::endl;
 
   if (!server.start()) {
     std::cerr << "Failed to start server" << std::endl;

@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 Server::Server(int port)
-    : port_(port), server_socket_(-1), running_(false) {}
+    : port_(port), server_socket_(-1), running_(false), thread_pool_(4) {}
 
 Server::~Server() {
   if (server_socket_ != -1) {
@@ -65,6 +65,7 @@ bool Server::start() {
 
 void Server::stop() {
   running_ = false;
+  thread_pool_.shutdown();
   if (server_socket_ != -1) {
     close(server_socket_);
     server_socket_ = -1;
@@ -92,12 +93,10 @@ void Server::accept_loop() {
               << inet_ntoa(client_addr.sin_addr) << ":"
               << ntohs(client_addr.sin_port) << std::endl;
 
-    // Handle client (blocking)
-    handle_client(client_socket);
-
-    // Close client socket
-    close(client_socket);
-    std::cout << "Client disconnected" << std::endl;
+    // Enqueue task to handle client (don't block)
+    thread_pool_.enqueue([this, client_socket]() {
+      handle_client(client_socket);
+    });
   }
 }
 
@@ -110,14 +109,22 @@ void Server::handle_client(int client_socket) {
 
   if (bytes_read > 0) {
     buffer[bytes_read] = '\0';
-    std::cout << "Received: " << buffer << std::endl;
+    std::string request(buffer);
+
+    std::cout << "Received: " << request << std::endl;
+
+    // Process request with RequestHandler
+    std::string response = request_handler_.handle_request(request);
 
     // Send response
-    const char* response = "OK\n";
-    send(client_socket, response, strlen(response), 0);
+    send(client_socket, response.c_str(), response.length(), 0);
   } else if (bytes_read == 0) {
     std::cout << "Client closed connection" << std::endl;
   } else {
     std::cerr << "recv() error" << std::endl;
   }
+
+  // Close the client socket
+  close(client_socket);
+  std::cout << "Client disconnected" << std::endl;
 }
