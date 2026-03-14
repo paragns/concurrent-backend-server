@@ -8,7 +8,8 @@
 #include <unistd.h>
 
 Server::Server(int port)
-    : port_(port), server_socket_(-1), running_(false), thread_pool_(4) {}
+    : port_(port), server_socket_(-1), running_(false), thread_pool_(4),
+      rate_limiter_(10, 10) {}  // ← NEW: 10 requests per 10 seconds (1 per second)
 
 Server::~Server() {
   if (server_socket_ != -1) {
@@ -107,20 +108,32 @@ void Server::accept_loop() {
       continue;
     }
 
-    std::cout << "Client connected: "
-              << inet_ntoa(client_addr.sin_addr) << ":"
+    // Extract client IP address
+    std::string client_ip = inet_ntoa(client_addr.sin_addr);
+    
+    std::cout << "Client connected: " << client_ip << ":"
               << ntohs(client_addr.sin_port) << std::endl;
 
+    // ← NEW: Check rate limit before enqueuing task
+    if (!rate_limiter_.allow_request(client_ip)) {
+      std::cout << "Rate limit exceeded for client: " << client_ip << std::endl;
+      // Send rate limit response and close immediately
+      const char* rate_limit_response = "RATE_LIMITED\n";
+      send(client_socket, rate_limit_response, strlen(rate_limit_response), 0);
+      close(client_socket);
+      continue;
+    }
+
     // Enqueue task to handle client (don't block)
-    thread_pool_.enqueue([this, client_socket]() {
-      handle_client(client_socket);
+    thread_pool_.enqueue([this, client_socket, client_ip]() {
+      handle_client(client_socket, client_ip);
     });
   }
   
   std::cout << "Accept loop exited" << std::endl;
 }
 
-void Server::handle_client(int client_socket) {
+void Server::handle_client(int client_socket, const std::string& client_ip) {
   const int BUFFER_SIZE = 1024;
   char buffer[BUFFER_SIZE];
 
@@ -131,7 +144,7 @@ void Server::handle_client(int client_socket) {
     buffer[bytes_read] = '\0';
     std::string request(buffer);
 
-    std::cout << "Received: " << request << std::endl;
+    std::cout << "Received from " << client_ip << ": " << request << std::endl;
 
     // Process request with RequestHandler
     std::string response = request_handler_.handle_request(request);
@@ -146,5 +159,5 @@ void Server::handle_client(int client_socket) {
 
   // Close the client socket
   close(client_socket);
-  std::cout << "Client disconnected" << std::endl;
+  std::cout << "Client disconnected: " << client_ip << std::endl;
 }

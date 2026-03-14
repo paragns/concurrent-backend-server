@@ -5,7 +5,8 @@
 **Server Configuration:**
 - Thread Pool: 4 workers
 - Key-Value Store: `std::unordered_map` with single `std::mutex`
-- Rate Limiter: Token bucket (10 requests per 10 seconds per client IP)
+- Rate Limiter: **ACTIVE** - Token bucket (10 requests per 10 seconds per client IP)
+  - ⚠️ **Note**: Rate limiter is constraining each client to ~1 req/sec, which affects high-concurrency results
 
 **Load Test Parameters:**
 - Test Duration: 10 seconds per scenario
@@ -23,6 +24,17 @@
 | 200 | 1,541.43 | 14.70 | 38.50 | 99.9% |
 
 ## Key Findings
+
+### ⚠️ Important Caveat: Rate Limiter Impact
+
+**The rate limiter (10 req/10sec = 1 req/sec per client) is active during testing.**
+
+This means each concurrent client is artificially throttled to maximum 1 request per second. At 100+ clients, most requests are actually being rate-limited, not processed by the server. The results below show:
+- Server's ability to handle *queued* rate-limited requests
+- Mutex lock contention *given the rate-limited input*
+- **NOT** the server's true maximum throughput without rate limiting
+
+For pure throughput measurement, rate limiter should be disabled or set to very high limits (10,000 req/10sec).
 
 ### 1. Throughput Scaling (RPS)
 - **10 → 50 clients**: -34% drop in RPS (6,859 from 10,367)

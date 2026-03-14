@@ -4,6 +4,7 @@
 #include <atomic>
 #include "request_handler.h"
 #include "thread_pool.h"
+#include "rate_limiter.h"
 
 class Server {
  public:
@@ -20,7 +21,8 @@ class Server {
   std::atomic<bool> running_;  // ← Changed to atomic for thread safety
   RequestHandler request_handler_;
   ThreadPool thread_pool_;
+  RateLimiter rate_limiter_;  // ← NEW: Rate limiting per client IP
 
   void accept_loop();
-  void handle_client(int client_socket);
+  void handle_client(int client_socket, const std::string& client_ip);
 };
