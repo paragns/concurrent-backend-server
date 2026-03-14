@@ -64,12 +64,23 @@ bool Server::start() {
 }
 
 void Server::stop() {
+  std::cout << "Stopping server..." << std::endl;
+  
+  // Signal that we're shutting down (atomic write)
   running_ = false;
-  thread_pool_.shutdown();
+  
+  // Close the server socket to interrupt accept()
+  // This will cause accept() to return with error if it's blocked
   if (server_socket_ != -1) {
     close(server_socket_);
     server_socket_ = -1;
   }
+
+  // Shutdown thread pool (waits for workers to finish)
+  std::cout << "Waiting for worker threads to finish..." << std::endl;
+  thread_pool_.shutdown();
+  
+  std::cout << "Server stopped successfully" << std::endl;
 }
 
 bool Server::is_running() const { return running_; }
@@ -82,7 +93,14 @@ void Server::accept_loop() {
     // Accept incoming connection
     int client_socket = accept(server_socket_, (struct sockaddr*)&client_addr,
                                 &client_addr_len);
+    
+    // Check if server is shutting down
+    if (!running_) {
+      break;
+    }
+    
     if (client_socket == -1) {
+      // Accept failed - could be due to shutdown
       if (running_) {
         std::cerr << "Failed to accept connection" << std::endl;
       }
@@ -98,6 +116,8 @@ void Server::accept_loop() {
       handle_client(client_socket);
     });
   }
+  
+  std::cout << "Accept loop exited" << std::endl;
 }
 
 void Server::handle_client(int client_socket) {
